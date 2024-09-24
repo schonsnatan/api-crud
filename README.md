@@ -1,4 +1,5 @@
-# api-crud
+# Fake API - Conceitos
+
 - Fornecer uma porta para o cliente acessar o serviço / banco de dados e fazer o CRUD
 - Rest (Representational State Transfer) API é um conceito:
     1. Cliente-servidor: A API segue uma separação clara entre o cliente (interface do usuário ou aplicativo que consome a API) e o servidor (onde os dados e a lógica de negócios estão). Isso promove a independência entre os dois.

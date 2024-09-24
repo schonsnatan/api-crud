@@ -1,68 +1,27 @@
-import requests
-import pandas as pd
-import datetime
-from io import BytesIO
-from contracts.schema import GenericSchema
-from typing import List
-from tools.retry import retry
+import time
+from functools import wraps
 
-class APICollector:
-        def __init__ (self, schema, aws): 
-            self._schema = schema
-            self._aws = aws
-            self._buffer = None
-            return
-        
-        def start(self, param):
-            response = self.getData(param)
-            response = self.extractData(response)
-            response = self.transformDf(response)
-            response = self.convertToParquet(response)
-
-            if self._buffer is not None:
-                 file_name = self.fileName()
-                 print(file_name)
-                 self._aws.upload_file(response, file_name)
-                 return True
-                 
-            return False
-                
-        @retry(requests.exceptions.RequestException, tries=5, delay=1, backoff=2)
-        def getData(self, param):
-            response = None
-            if param > 1:
-                  response = requests.get(f'http://127.0.0.1:8000/gerar_compras/{param}').json()
-            else:
-                 response = requests.get('http://127.0.0.1:8000/gerar_compra').json()
-            return response
-                
-        def extractData(self, response):
-            result: List[GenericSchema] = []
-            for item in response:
-                index = {}
-                for key, value in self._schema.items():
-                    if type(item.get(key)) == value:
-                        index[key] = item[key]
-                    else:
-                        index[key] = None
-                result.append(index)
-            return result
-        
-        def transformDf(self, response):
-              result = pd.DataFrame(response)
-              return result
-        
-        def convertToParquet(self, response):
-            self._buffer = BytesIO()
-            try:
-                with self._buffer as buffer:
-                    response.to_parquet(buffer)
-                    return buffer
-            except Exception as e:
-                    print(f"Error converting DataFrame to Parquet: {e}")
-                    self._buffer = None
-
-        def fileName(self):
-             data_atual = datetime.datetime.now().isoformat()
-             match = data_atual.split(".")
-             return f"api/api-reponse-compra{match[0]}.parquet"
+def retry(exception_to_check, tries=3, delay=1, backoff=2):
+    """
+    Decorator que retenta a função várias vezes em caso de exceção.
+    
+    :param exception_to_check: A exceção (ou tuple de exceções) que deve ser capturada.
+    :param tries: O número máximo de tentativas.
+    :param delay: O tempo de espera inicial entre as tentativas.
+    :param backoff: O fator pelo qual o atraso deve aumentar após cada tentativa.
+    """
+    def decorator_retry(func):
+        @wraps(func)
+        def wrapper_retry(*args, **kwargs):
+            _tries, _delay = tries, delay
+            while _tries > 1:
+                try:
+                    return func(*args, **kwargs)
+                except exception_to_check as e:
+                    print(f"{func.__name__} falhou, tentando novamente em {_delay} segundos. Tentativas restantes: {_tries - 1}")
+                    time.sleep(_delay)
+                    _tries -= 1
+                    _delay *= backoff
+            return func(*args, **kwargs)
+        return wrapper_retry
+    return decorator_retry
